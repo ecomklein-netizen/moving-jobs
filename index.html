@@ -82,6 +82,8 @@
   .stoprow .sr-x{background:#fdecec;color:var(--danger);padding:9px 13px;font-size:14px;border-radius:10px}
   .stoprow input{margin-top:8px}
   .addstop{background:#e8efff;color:var(--brand);width:100%;margin-top:8px;font-size:14px;padding:10px}
+  .bellbtn{width:100%;background:#fff4d6;color:#8a6400;border:1px solid #f0dfa8;font-size:14px;
+    padding:11px;margin:4px 0 10px;border-radius:12px}
   .stops{margin-top:8px;display:flex;flex-direction:column;gap:6px}
   .stopline{display:flex;align-items:center;gap:10px;background:#f2f6ff;border:1px solid #dbe5ff;
     border-radius:12px;padding:10px 12px;text-decoration:none;color:var(--ink)}
@@ -104,6 +106,7 @@
   var app = document.getElementById('app');
   var API = 'https://bpnpeospivgdvgalbpng.supabase.co/functions/v1/app/api/';
   var STOP_ICONS = {Pickup:'📦', Delivery:'🏠', Stop:'📍'};
+  var VAPID_PUBLIC = 'BN90FzYiphWZ_tITYk0qiB1jvTP3rl-djhzNYvoqDvkuWveqLRg7lso7O6vGepfq6KIP0m6vuvd-gN7L3Xqwics';
 
   // ---------- helpers ----------
   function el(tag, cls, txt){ var e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
@@ -183,6 +186,44 @@
   // WORKER VIEW
   // ============================================================
   if(TOK){
+    function urlB64(s){
+      var pad = '='.repeat((4 - s.length % 4) % 4);
+      var b = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+      var raw = atob(b); var arr = new Uint8Array(raw.length);
+      for(var i=0;i<raw.length;i++) arr[i] = raw.charCodeAt(i);
+      return arr;
+    }
+    function enablePush(silent){
+      if(typeof Notification === 'undefined'){
+        toast('On iPhone: first add this page to your Home Screen, then try again.');
+        return;
+      }
+      navigator.serviceWorker.register('sw.js?t='+encodeURIComponent(TOK)).then(function(reg){
+        return Notification.requestPermission().then(function(perm){
+          if(perm !== 'granted'){ if(!silent) toast('Notifications not allowed'); return; }
+          return reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey: urlB64(VAPID_PUBLIC)})
+            .then(function(sub){
+              return api('worker/subscribe', {method:'POST', body: JSON.stringify({sub: sub.toJSON()})});
+            })
+            .then(function(r){
+              if(r && r.ok){
+                var b = document.getElementById('bellbtn'); if(b) b.remove();
+                if(!silent) toast('Notifications on ✓ You will be notified about new jobs.');
+              }
+            });
+        });
+      }).catch(function(){ if(!silent) toast('Could not enable notifications'); });
+    }
+    function setupPush(){
+      if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if(typeof Notification !== 'undefined' && Notification.permission === 'granted'){ enablePush(true); return; }
+      if(typeof Notification !== 'undefined' && Notification.permission === 'denied') return;
+      if(document.getElementById('bellbtn')) return;
+      var b = el('button','bellbtn','🔔 Turn on notifications for new jobs');
+      b.id = 'bellbtn';
+      b.onclick = function(){ enablePush(false); };
+      app.appendChild(b);
+    }
     function loadWorker(){
       api('worker').then(function(data){
         app.innerHTML='';
@@ -190,6 +231,7 @@
         var h = el('div','worker-hi','Hi '+data.name+' 👋');
         app.appendChild(h);
         app.appendChild(el('div','worker-sub','Here are your jobs. Tap a location to navigate.'));
+        setupPush();
         var today = todayStr();
         var upcoming = data.jobs.filter(function(j){ return j.job_date >= today; });
         var past = data.jobs.filter(function(j){ return j.job_date < today; });
