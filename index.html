@@ -220,6 +220,11 @@
     var g={}; jobs.forEach(function(j){ (g[j.job_date]=g[j.job_date]||[]).push(j); });
     return Object.keys(g).sort().map(function(d){ return {date:d, jobs:g[d]}; });
   }
+  function helperSuffix(n){
+    n = parseInt(n,10) || 0;
+    if(n <= 0) return '';
+    return ' + ' + n + ' ' + (n===1 ? 'helper' : 'helpers');
+  }
 
   // ============================================================
   // WORKER VIEW
@@ -303,6 +308,7 @@
       card.appendChild(el('div','hwhen', dl.label + (dl.badge ? ' \u00b7 ' + dl.badge : '')));
       card.appendChild(el('div','htime', hm(j.start_time)));
       card.appendChild(el('div','hcust', j.customer_name));
+      if((parseInt(j.helpers,10)||0) > 0) card.appendChild(el('div','hwhen', '👷 You' + helperSuffix(j.helpers)));
       jobStops(j).forEach(function(s){
         var u = stopMapsUrl(s);
         var row = el(u ? 'a' : 'div','hstop');
@@ -341,6 +347,7 @@
         card.appendChild(tm);
         var body = el('div','body');
         body.appendChild(el('div','cust',j.customer_name));
+        if((parseInt(j.helpers,10)||0) > 0) body.appendChild(el('div','who','👷 You'+helperSuffix(j.helpers)));
         var act = el('div','actions');
         appendStopInfo(body, act, j);
         if(j.notes) body.appendChild(el('div','notes',j.notes));
@@ -424,6 +431,7 @@
       r2.appendChild(fieldWrap('Start time at customer','time','start_time'));
       r2.appendChild(fieldWrap('Assign to','select','employee_id'));
       f.appendChild(r2);
+      f.appendChild(helpersField());
       f.appendChild(field('Customer name','text','customer_name',null,'e.g. Mrs. Georgiou'));
       f.appendChild(field('Phone number','tel','phone',null,'+357 99 ...'));
 
@@ -537,7 +545,7 @@
       var body = el('div','body');
       body.appendChild(el('div','cust',j.customer_name));
       var emp = state.employees.find(function(e){return e.id===j.employee_id;});
-      body.appendChild(el('div','who', emp ? '👷 '+emp.name : '⚠️ Not assigned'));
+      body.appendChild(el('div','who', (emp ? '👷 '+emp.name : '⚠️ Not assigned') + helperSuffix(j.helpers)));
       if(j.phone) body.appendChild(el('div','meta','📞 '+j.phone));
       var act = el('div','actions');
       appendStopInfo(body, act, j);
@@ -566,6 +574,16 @@
       w.appendChild(i);
       return w;
     }
+    function helpersField(){
+      var w = el('div');
+      w.appendChild(el('label',null,'Helpers coming along'));
+      var s = el('select'); s.id='f-helpers';
+      [['0','Just the lead (solo)'],['1','+ 1 helper'],['2','+ 2 helpers'],['3','+ 3 helpers']].forEach(function(o){
+        var op = el('option',null,o[1]); op.value=o[0]; s.appendChild(op);
+      });
+      w.appendChild(s);
+      return w;
+    }
     function fieldWrap(lbl,type,id){
       if(type==='select'){
         var w = el('div');
@@ -588,6 +606,7 @@
       ['job_date','start_time','customer_name','phone','notes','employee_id'].forEach(function(k){
         var i = document.getElementById('f-'+k); if(i) i.value = j[k]||'';
       });
+      var hs = document.getElementById('f-helpers'); if(hs) hs.value = String(j.helpers || 0);
       var st = document.getElementById('f-start_time'); if(st && j.start_time) st.value = j.start_time.slice(0,5);
     }
     function submitJob(){
@@ -604,6 +623,7 @@
         customer_name: get('customer_name'), phone: get('phone'),
         stops: stops,
         notes: get('notes'), employee_id: get('employee_id'),
+        helpers: parseInt(get('helpers'),10) || 0,
       };
       if(!b.job_date || !b.start_time || !b.customer_name){ toast('Please fill date, time and customer name'); return; }
       api('jobs',{method:'POST',body:JSON.stringify(b)}).then(function(r){
